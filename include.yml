@@ -1,0 +1,9 @@
+---
+- name: Debug Looped
+  shell:
+    cmd: "tr -dc A-Za-z0-9 </dev/urandom | head -c 5000"
+  register: test 
+
+- name: Debug Looped
+  debug:
+    msg: "Msg: {{ test }} Iteration: {{ item }}"
