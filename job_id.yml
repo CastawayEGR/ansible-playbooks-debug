@@ -1,0 +1,9 @@
+- name: Use set_stats to capture data and create an artifact
+  hosts: localhost
+  tasks:
+    - set_fact:
+        job_id: "{{ lookup('env', 'JOB_ID') | int }}"
+    - name: Set the output as job_id
+      set_stats:
+        data:
+          job_id: "{{ job_id }}"
