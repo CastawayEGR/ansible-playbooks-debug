@@ -1,0 +1,11 @@
+- name: Use set_stats to capture data and create an artifact
+  hosts: localhost
+  tasks:
+    - name: Generate some dynamic data
+      command: echo "This is some dynamic data."
+      register: command_output
+
+    - name: Set the output as a variable using set_stats
+      set_stats:
+        stats:
+          command_result: "{{ command_output.stdout }}"
