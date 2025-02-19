@@ -7,7 +7,7 @@
     cpu_cores: 8
     memory_workers: 4
     memory_bytes: "4g"
-    timeout: 300
+    time_out: 300
 
   tasks:
     #- name: Install stress-ng
@@ -17,15 +17,15 @@
     #  become: yes
 
     - name: Stress CPU
-      ansible.builtin.command: stress-ng --cpu {{ cpu_cores }} --timeout {{ timeout }} --metrics-brief
-      async: "{{ timeout }}"
+      ansible.builtin.command: stress-ng --cpu {{ cpu_cores }} --timeout {{ time_out }} --metrics-brief
+      async: "{{ time_out }}"
       poll: 0
       register: cpu_stress
       when: stress_cpu
 
     - name: Stress Memory
-      ansible.builtin.command: stress-ng --vm {{ memory_workers }} --vm-bytes {{ memory_bytes }} --timeout {{ timeout }} --metrics-brief
-      async: "{{ timeout }}"
+      ansible.builtin.command: stress-ng --vm {{ memory_workers }} --vm-bytes {{ memory_bytes }} --timeout {{ time_out }} --metrics-brief
+      async: "{{ time_out }}"
       poll: 0
       register: memory_stress
       when: stress_memory
