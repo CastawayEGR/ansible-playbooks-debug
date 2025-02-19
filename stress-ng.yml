@@ -36,7 +36,7 @@
       register: job_result
       until: job_result.finished
       retries: 10
-      delay: 6
+      delay: 60
       when: stress_cpu
 
     - name: Wait for Memory stress to complete
@@ -45,7 +45,7 @@
       register: job_result
       until: job_result.finished
       retries: 10
-      delay: 6
+      delay: 60
       when: stress_memory
 
     - name: Display stress-ng results
