@@ -1,0 +1,53 @@
+---
+- name: Stress Test Limits with stress-ng
+  hosts: all
+  become: yes
+  vars:
+    stress_cpu: true
+    stress_memory: true
+    cpu_cores: 8
+    memory_workers: 4
+    memory_bytes: "4g"
+    timeout: 300
+
+  tasks:
+    - name: Install stress-ng
+      ansible.builtin.package:
+        name: stress-ng
+        state: present
+
+    - name: Stress CPU
+      ansible.builtin.command: stress-ng --cpu {{ cpu_cores }} --timeout {{ timeout }} --metrics-brief
+      async: "{{ timeout }}"
+      poll: 0
+      register: cpu_stress
+      when: stress_cpu
+
+    - name: Stress Memory
+      ansible.builtin.command: stress-ng --vm {{ memory_workers }} --vm-bytes {{ memory_bytes }} --timeout {{ timeout }} --metrics-brief
+      async: "{{ timeout }}"
+      poll: 0
+      register: memory_stress
+      when: stress_memory
+
+    - name: Wait for CPU stress to complete
+      ansible.builtin.async_status:
+        jid: "{{ cpu_stress.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 10
+      delay: 6
+      when: stress_cpu
+
+    - name: Wait for Memory stress to complete
+      ansible.builtin.async_status:
+        jid: "{{ memory_stress.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 10
+      delay: 6
+      when: stress_memory
+
+    - name: Display stress-ng results
+      ansible.builtin.debug:
+        msg: "Stress test completed for CPU and/or Memory."
