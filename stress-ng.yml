@@ -14,7 +14,7 @@
       ansible.builtin.package:
         name: stress-ng
         state: present
-      become: yes
+      #become: yes
 
     - name: Stress CPU
       ansible.builtin.command: stress-ng --cpu {{ cpu_cores }} --timeout {{ timeout }} --metrics-brief
