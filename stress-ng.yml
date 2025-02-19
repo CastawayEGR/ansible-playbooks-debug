@@ -2,7 +2,7 @@
 - name: Stress Test Limits with stress-ng
   hosts: all
   vars:
-    stress_cpu: true
+    stress_cpu: false
     stress_memory: true
     cpu_cores: 8
     memory_workers: 4
@@ -47,7 +47,3 @@
       retries: 10
       delay: 60
       when: stress_memory
-
-    - name: Display stress-ng results
-      ansible.builtin.debug:
-        msg: "Stress test completed for CPU and/or Memory."
