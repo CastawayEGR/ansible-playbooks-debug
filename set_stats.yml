@@ -1,0 +1,31 @@
+---
+# Consolidated set_stats/artifact playbook
+# Replaces: set_stats.yml, job_id.yml
+#
+# Usage:
+#   ansible-playbook set_stats.yml                            # capture command output
+#   ansible-playbook set_stats.yml -e artifact_type=job_id    # capture JOB_ID from env
+- name: Use set_stats to capture data and create an artifact
+  hosts: localhost
+  tasks:
+    - name: Generate some dynamic data
+      command: echo "This is some dynamic data."
+      register: command_output
+      when: artifact_type | default('command') == 'command'
+
+    - name: Set command output as artifact
+      set_stats:
+        data:
+          command_result: "{{ command_output.stdout }}"
+      when: artifact_type | default('command') == 'command'
+
+    - name: Read JOB_ID from environment
+      set_fact:
+        job_id: "{{ lookup('env', 'JOB_ID') | int }}"
+      when: artifact_type | default('command') == 'job_id'
+
+    - name: Set job_id as artifact
+      set_stats:
+        data:
+          job_id: "{{ job_id }}"
+      when: artifact_type | default('command') == 'job_id'

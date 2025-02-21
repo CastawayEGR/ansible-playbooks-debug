@@ -1,0 +1,33 @@
+---
+- hosts: localhost
+  tasks:
+
+    - name: Debug Looped1
+      debug:
+        msg: "Iteration: {{ item }}"
+      loop: "{{ range(10000) | list}}"
+      
+    - name: Debug Looped2
+      debug:
+        msg: "Iteration: {{ item }}"
+      loop: "{{ range(10000) | list}}"
+
+    - name: Debug Looped3
+      debug:
+        msg: "Iteration: {{ item }}"
+      loop: "{{ range(10000) | list}}"
+      
+    - name: Debug Looped4
+      debug:
+        msg: "Iteration: {{ item }}"
+      loop: "{{ range(10000) | list}}"
+
+    - name: Debug Looped5
+      debug:
+        msg: "Iteration: {{ item }}"
+      loop: "{{ range(10000) | list}}"
+      
+    - name: Debug Looped6
+      debug:
+        msg: "Iteration: {{ item }}"
+      loop: "{{ range(10000) | list}}"

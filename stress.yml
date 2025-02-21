@@ -1,0 +1,223 @@
+---
+- name: Provision and run stress-ng with random parameters
+  hosts: all
+
+  vars:
+    min_cpu: 10
+    max_cpu: 80
+    min_memory: 10
+    max_memory: 70
+    run_duration: 60
+    # stress_mode: 'safe', 'pod_oom', 'node_pressure'
+    #   safe         - stay within container limits (default)
+    #   pod_oom      - exceed container limit to trigger OOM kill
+    #   node_pressure - use high percentage for concurrent job node stress
+    stress_mode: safe
+    oom_multiplier: 1.25    # pod_oom: multiplier to exceed limit (1.25 = 125%)
+    pressure_percent: 95    # node_pressure: percentage of container limit to use
+
+  tasks:
+    - name: Validate input parameters
+      assert:
+        that:
+          - min_cpu >= 0 and min_cpu <= 100
+          - max_cpu >= 0 and max_cpu <= 100
+          - min_cpu <= max_cpu
+          - min_memory >= 0 and min_memory <= 100
+          - max_memory >= 0 and max_memory <= 100
+          - min_memory <= max_memory
+          - run_duration > 0
+        fail_msg: "Invalid parameters: ensure min <= max and values are within valid ranges"
+        quiet: true
+      tags: [always]
+
+    - name: Install stress-ng
+      package:
+        name: stress-ng
+        state: present
+      become: true
+      tags: [install]
+
+    - name: Generate random CPU percentage
+      set_fact:
+        random_cpu: "{{ range(min_cpu, max_cpu + 1) | random }}"
+      tags: [generate, execute]
+
+    - name: Generate random memory percentage
+      set_fact:
+        random_memory: "{{ range(min_memory, max_memory + 1) | random }}"
+      tags: [generate, execute]
+
+    # Detect container memory limit from cgroups
+    # This prevents OOM kills when running in containers
+    - name: Check for cgroups v2 memory limit
+      ansible.builtin.slurp:
+        src: /sys/fs/cgroup/memory.max
+      register: cgroup_v2_memory
+      ignore_errors: true
+      tags: [generate, execute]
+
+    - name: Check for cgroups v1 memory limit
+      ansible.builtin.slurp:
+        src: /sys/fs/cgroup/memory/memory.limit_in_bytes
+      register: cgroup_v1_memory
+      ignore_errors: true
+      when: cgroup_v2_memory is failed
+      tags: [generate, execute]
+
+    - name: Determine effective memory limit
+      set_fact:
+        # Use cgroup limit if available and not "max" (unlimited)
+        # Fall back to ansible_memtotal_mb if no cgroup limit is set
+        container_memory_bytes: >-
+          {%- if cgroup_v2_memory is succeeded -%}
+            {%- set mem_val = (cgroup_v2_memory.content | b64decode | trim) -%}
+            {%- if mem_val == 'max' -%}
+              {{ ansible_memtotal_mb * 1024 * 1024 }}
+            {%- else -%}
+              {{ mem_val | int }}
+            {%- endif -%}
+          {%- elif cgroup_v1_memory is defined and cgroup_v1_memory is succeeded -%}
+            {%- set mem_val = (cgroup_v1_memory.content | b64decode | trim) | int -%}
+            {# cgroups v1 uses a very large number for unlimited #}
+            {%- if mem_val > (ansible_memtotal_mb * 1024 * 1024 * 2) -%}
+              {{ ansible_memtotal_mb * 1024 * 1024 }}
+            {%- else -%}
+              {{ mem_val }}
+            {%- endif -%}
+          {%- else -%}
+            {{ ansible_memtotal_mb * 1024 * 1024 }}
+          {%- endif -%}
+      tags: [generate, execute]
+
+    - name: Determine memory multiplier based on stress mode
+      set_fact:
+        memory_multiplier: >-
+          {%- if stress_mode == 'pod_oom' -%}
+            {{ oom_multiplier }}
+          {%- elif stress_mode == 'node_pressure' -%}
+            {{ pressure_percent / 100 }}
+          {%- else -%}
+            0.9
+          {%- endif -%}
+      tags: [generate, execute]
+
+    - name: Calculate memory bytes to use
+      set_fact:
+        # Calculate the actual bytes based on container limit and stress mode
+        # safe: 90% of limit, pod_oom: exceed limit, node_pressure: high percentage
+        memory_bytes_to_use: "{{ ((container_memory_bytes | int) * (random_memory | int) / 100 * (memory_multiplier | float)) | int }}"
+      tags: [generate, execute]
+
+    - name: Convert memory to human readable format
+      set_fact:
+        memory_mb_to_use: "{{ (memory_bytes_to_use | int / 1024 / 1024) | int }}"
+        container_memory_mb: "{{ (container_memory_bytes | int / 1024 / 1024) | int }}"
+      tags: [generate, execute]
+
+    - name: Calculate concurrent job guidance
+      set_fact:
+        # Estimate usable node memory (allocatable minus system overhead)
+        node_usable_mb: "{{ (ansible_memtotal_mb * 0.80) | int }}"
+        # Memory each job uses in node_pressure mode
+        pressure_memory_per_job: "{{ (container_memory_bytes | int / 1024 / 1024 * (pressure_percent / 100)) | int }}"
+        # Jobs needed to fill node memory
+        jobs_for_node_pressure: "{{ ((ansible_memtotal_mb * 0.80) / (container_memory_bytes | int / 1024 / 1024 * (pressure_percent / 100))) | int }}"
+        jobs_for_aggressive_oom: "{{ (((ansible_memtotal_mb * 0.80) / (container_memory_bytes | int / 1024 / 1024 * (pressure_percent / 100))) + 2) | int }}"
+      tags: [generate, execute]
+
+    - name: Display node-level stress guidance
+      debug:
+        msg:
+          - "==========================================="
+          - "Node-Level Stress Guidance"
+          - "==========================================="
+          - "Node Total Memory: {{ ansible_memtotal_mb }} MB"
+          - "Estimated Usable: {{ node_usable_mb }} MB (80% of total)"
+          - "Container Limit: {{ container_memory_mb }} MB"
+          - "-------------------------------------------"
+          - "For KUBELET EVICTION (gradual):"
+          - "  Mode: node_pressure"
+          - "  Memory per job: {{ pressure_memory_per_job }} MB ({{ pressure_percent }}% of limit)"
+          - "  Launch {{ jobs_for_node_pressure }} concurrent jobs"
+          - "-------------------------------------------"
+          - "For KERNEL OOM (aggressive):"
+          - "  Mode: pod_oom"
+          - "  Launch {{ jobs_for_aggressive_oom }}+ concurrent jobs"
+          - "  OR: Increase EE limit to {{ (node_usable_mb | int / 2) | int }}MB+, run 2 jobs"
+          - "==========================================="
+      tags: [generate, execute]
+
+    - name: Display stress test parameters
+      debug:
+        msg:
+          - "==========================================="
+          - "Stress Mode: {{ stress_mode | upper }}"
+          - "{% if stress_mode == 'pod_oom' %}*** WARNING: This WILL trigger OOM kill ***{% elif stress_mode == 'node_pressure' %}*** High memory usage for node pressure testing ***{% else %}*** Safe mode - staying within limits ***{% endif %}"
+          - "==========================================="
+          - "Container Memory Detection"
+          - "==========================================="
+          - "Host Total Memory: {{ ansible_memtotal_mb }} MB"
+          - "Container Memory Limit: {{ container_memory_mb }} MB"
+          - "Memory Multiplier: {{ memory_multiplier }}x"
+          - "Memory to Allocate: {{ memory_mb_to_use }} MB"
+          - "{% if stress_mode == 'pod_oom' %}  ({{ ((memory_mb_to_use | int / container_memory_mb | int) * 100) | int }}% of limit - EXCEEDS LIMIT){% else %}  ({{ random_memory }}% of container limit × {{ memory_multiplier }}){% endif %}"
+          - "==========================================="
+          - "Stress Test Parameters"
+          - "==========================================="
+          - "CPU Load: {{ random_cpu }}%"
+          - "Memory: {{ memory_mb_to_use }} MB"
+          - "Duration: {{ run_duration }}s"
+          - "==========================================="
+      tags: [generate, execute]
+
+    - name: Execute stress-ng test
+      block:
+        - name: Run stress-ng with generated parameters
+          ansible.builtin.command:
+            cmd: >-
+              stress-ng
+              --cpu 0
+              --cpu-load {{ random_cpu }}
+              --vm 1
+              --vm-bytes {{ memory_bytes_to_use }}
+              --timeout {{ run_duration }}s
+              --metrics-brief
+              --verbose
+          register: stress_result
+          changed_when: false
+          tags: [execute]
+
+        - name: Display stress-ng output
+          debug:
+            var: stress_result.stdout_lines
+          when: stress_result.stdout_lines is defined
+          tags: [execute]
+
+      rescue:
+        - name: Handle stress-ng execution failure
+          debug:
+            msg: "Stress-ng execution failed: {{ stress_result.stderr | default('Unknown error') }}"
+
+        - name: Fail playbook on stress-ng error
+          fail:
+            msg: "Stress test failed to complete"
+
+    - name: Display execution summary
+      debug:
+        msg:
+          - "==========================================="
+          - "Stress Test Execution Summary"
+          - "==========================================="
+          - "Timestamp: {{ ansible_date_time.iso8601 }}"
+          - "Stress Mode: {{ stress_mode | upper }}"
+          - "Host Memory: {{ ansible_memtotal_mb }} MB"
+          - "Container Limit: {{ container_memory_mb }} MB"
+          - "CPU Load: {{ random_cpu }}%"
+          - "Memory Allocated: {{ memory_mb_to_use }} MB"
+          - "Memory Multiplier: {{ memory_multiplier }}x"
+          - "Duration: {{ run_duration }}s"
+          - "Exit Code: {{ stress_result.rc }}"
+          - "Status: {{ 'SUCCESS' if stress_result.rc == 0 else 'FAILED' }}"
+          - "==========================================="
+      tags: [execute, logging]

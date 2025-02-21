@@ -1,0 +1,28 @@
+---
+# Consolidated long-running job playbook
+# Replaces: sleeper.yml, 1hour.yml
+#
+# Usage:
+#   ansible-playbook sleeper.yml                              # simple 600s sleep
+#   ansible-playbook sleeper.yml -e sleep_duration=60         # custom duration
+#   ansible-playbook sleeper.yml -e mode=retry                # 1-hour retry loop mode
+- name: Long-running job
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Sleep for specified duration
+      shell:
+        cmd: "sleep {{ sleep_duration | default(600) }}"
+      when: mode | default('simple') == 'simple'
+
+    - name: Print numbers and sleep (retry loop)
+      shell: |
+        for i in $(seq 1 60); do
+          echo "Number: $i"
+          sleep 1
+        done
+      register: output
+      until: output.stdout_lines | length >= 3600
+      retries: 60
+      delay: 60
+      when: mode | default('simple') == 'retry'

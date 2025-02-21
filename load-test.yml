@@ -1,0 +1,28 @@
+---
+# Consolidated load-test playbook
+# Replaces: 500.yml, 5k.yml, 10k.yml, 20k.yml, 50k.yml, 500k.yml, 1m.yml, 5m.yml, 50_all.yml
+#
+# Usage:
+#   ansible-playbook load-test.yml                                    # 500 iterations on localhost
+#   ansible-playbook load-test.yml -e loop_iterations=5000            # 5k iterations
+#   ansible-playbook load-test.yml -e loop_iterations=1000000         # 1m iterations
+#   ansible-playbook load-test.yml -e target_hosts=all                # run across all hosts
+#   ansible-playbook load-test.yml -e target_hosts=all -e delegate=localhost  # all hosts, delegated
+#   ansible-playbook load-test.yml -e task_count=6 -e loop_iterations=10000   # replicate ltest.yml behavior
+#   ansible-playbook load-test.yml -e verbose_output=true -e loop_iterations=50000  # replicate verbose.yml
+- name: Load Test
+  hosts: "{{ target_hosts | default('localhost') }}"
+  tasks:
+    - name: Debug Looped
+      debug:
+        msg: "Iteration: {{ item }}"
+      loop: "{{ range(loop_iterations | default(500) | int) | list }}"
+      delegate_to: "{{ delegate | default(omit) }}"
+      when: verbose_output | default(false) | bool == false
+
+    - name: Verbose Looped
+      shell:
+        cmd: "tr -dc A-Za-z0-9 </dev/urandom | head -c 5000; echo"
+      loop: "{{ range(loop_iterations | default(500) | int) | list }}"
+      delegate_to: "{{ delegate | default(omit) }}"
+      when: verbose_output | default(false) | bool

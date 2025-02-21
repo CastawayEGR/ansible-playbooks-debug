@@ -1,0 +1,35 @@
+---
+# Consolidated failure simulation playbook
+# Replaces: fail.yml, fail-traceback.yml
+#
+# Usage:
+#   ansible-playbook fail.yml                                # simple command failure
+#   ansible-playbook fail.yml -e failure_type=traceback       # python traceback failure
+- name: Fail Playbook
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: This task will fail (command)
+      command: /bin/false
+      register: result
+      when: failure_type | default('command') == 'command'
+
+    - name: Execute a Python script that intentionally raises an exception
+      ansible.builtin.script: |
+        #!/usr/bin/env python3
+        import sys
+
+        def main():
+            raise ValueError("Receptor detail:\nFinished")
+
+        if __name__ == "__main__":
+            try:
+                main()
+            except Exception as e:
+                raise e
+      args:
+        executable: python3
+      register: script_output
+      ignore_errors: no
+      when: failure_type | default('command') == 'traceback'
