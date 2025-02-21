@@ -1,0 +1,7 @@
+---
+- hosts: localhost
+  tasks:
+
+    - name: Debug Looped
+      shell:
+        cmd: "sleep 600"

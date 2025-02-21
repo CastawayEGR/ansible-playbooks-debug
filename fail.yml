@@ -1,0 +1,9 @@
+---
+- name: Fail Playbook
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: This task will fail
+      command: /bin/false
+      register: result

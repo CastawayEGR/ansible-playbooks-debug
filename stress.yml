@@ -1,0 +1,21 @@
+---
+- name: Stress Test Limits with stress
+  hosts: all
+  vars:
+    memory_workers: 1
+    memory_bytes: "4G"
+
+  tasks:
+    - name: Stress Memory
+      ansible.builtin.command: stress --vm {{ memory_workers }} --vm-bytes {{ memory_bytes }} --vm-hang 1 --backoff 10000000 --vm-keep
+      #async: "{{ time_out }}"
+      #poll: 0
+      register: memory_stress
+
+    #- name: Wait for Memory stress to complete
+    #  ansible.builtin.async_status:
+    #    jid: "{{ memory_stress.ansible_job_id }}"
+    #  register: job_result
+    #  until: job_result.finished
+    #  retries: 100
+    #  delay: 60
