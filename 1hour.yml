@@ -1,0 +1,15 @@
+---
+- name: 1 hour long job
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Print numbers and sleep
+      shell: |
+        for i in $(seq 1 60); do
+          echo "Number: $i"
+          sleep 1
+        done
+      register: output
+      until: output.stdout_lines | length >= 3600
+      retries: 60
+      delay: 60
