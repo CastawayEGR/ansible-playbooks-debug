@@ -1,0 +1,8 @@
+---
+- hosts: all
+  tasks:
+
+    - name: Debug Looped
+      debug:
+        msg: "Iteration: {{ item }}"
+      loop: "{{ range(500) | list}}"
