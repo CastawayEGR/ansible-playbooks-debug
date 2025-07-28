@@ -6,7 +6,7 @@
   tasks:
     - name: Execute a Python script that intentionally raises an exception
       ansible.builtin.script: |
-        #!/usr/bin/env python3
+        #!/usr/bin/python3
         import sys
         
         def main():
