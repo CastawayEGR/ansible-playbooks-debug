@@ -1,0 +1,26 @@
+---
+- name: Simulate a failing job with a traceback
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Execute a Python script that intentionally raises an exception
+      ansible.builtin.script: |
+        #!/usr/bin/env python3
+        import sys
+        
+        def main():
+            # This will cause a ZeroDivisionError, leading to a traceback
+            result = 1 / 0
+            print(f"Result: {result}")
+
+        if __name__ == "__main__":
+            try:
+                main()
+            except Exception as e:
+                # Re-raise the exception to ensure Ansible captures the traceback
+                raise e
+      args:
+        executable: python3
+      register: script_output
+      ignore_errors: no # Ensure the task fails if the script errors
