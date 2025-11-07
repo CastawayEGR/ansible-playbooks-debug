@@ -1,0 +1,97 @@
+---
+- name: Provision and run stress-ng with random parameters
+  hosts: all
+
+  vars:
+    min_cpu: 10
+    max_cpu: 80
+    min_memory: 10
+    max_memory: 70
+    run_duration: 60
+
+  tasks:
+    - name: Validate input parameters
+      assert:
+        that:
+          - min_cpu >= 0 and min_cpu <= 100
+          - max_cpu >= 0 and max_cpu <= 100
+          - min_cpu <= max_cpu
+          - min_memory >= 0 and min_memory <= 100
+          - max_memory >= 0 and max_memory <= 100
+          - min_memory <= max_memory
+          - run_duration > 0
+        fail_msg: "Invalid parameters: ensure min <= max and values are within valid ranges"
+        quiet: true
+      tags: [always]
+
+    - name: Install stress-ng
+      package:
+        name: stress-ng
+        state: present
+      become: true
+      tags: [install]
+
+    - name: Generate random CPU percentage
+      set_fact:
+        random_cpu: "{{ range(min_cpu, max_cpu + 1) | random }}"
+      tags: [generate, execute]
+
+    - name: Generate random memory percentage
+      set_fact:
+        random_memory: "{{ range(min_memory, max_memory + 1) | random }}"
+      tags: [generate, execute]
+
+    - name: Display stress test parameters
+      debug:
+        msg:
+          - "CPU Load: {{ random_cpu }}%"
+          - "Memory Load: {{ random_memory }}%"
+          - "Duration: {{ run_duration }}s"
+      tags: [generate, execute]
+
+    - name: Execute stress-ng test
+      block:
+        - name: Run stress-ng with generated parameters
+          ansible.builtin.command:
+            cmd: >-
+              stress-ng
+              --cpu 0
+              --cpu-load {{ random_cpu }}
+              --vm 1
+              --vm-bytes {{ random_memory }}%
+              --timeout {{ run_duration }}s
+              --metrics-brief
+              --verbose
+          register: stress_result
+          changed_when: false
+          tags: [execute]
+
+        - name: Display stress-ng output
+          debug:
+            var: stress_result.stdout_lines
+          when: stress_result.stdout_lines is defined
+          tags: [execute]
+
+      rescue:
+        - name: Handle stress-ng execution failure
+          debug:
+            msg: "Stress-ng execution failed: {{ stress_result.stderr | default('Unknown error') }}"
+
+        - name: Fail playbook on stress-ng error
+          fail:
+            msg: "Stress test failed to complete"
+
+    - name: Display execution summary
+      debug:
+        msg:
+          - "========================================="
+          - "Stress Test Execution Summary"
+          - "========================================="
+          - "Timestamp: {{ ansible_date_time.iso8601 }}"
+          - "CPU Load: {{ random_cpu }}%"
+          - "Memory Load: {{ random_memory }}%"
+          - "Duration: {{ run_duration }}s"
+          - "Exit Code: {{ stress_result.rc }}"
+          - "Status: {{ 'SUCCESS' if stress_result.rc == 0 else 'FAILED' }}"
+          - "========================================="
+      tags: [execute, logging]
