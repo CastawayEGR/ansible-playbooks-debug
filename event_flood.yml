@@ -1,0 +1,12 @@
+---
+- name: OOM task pod via callback receiver
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Generate large events rapidly
+      debug:
+        msg: "{{ '%0200000d' | format(item) }}"
+      loop: "{{ range(10000) | list }}"
+      loop_control:
+        label: "evt"
